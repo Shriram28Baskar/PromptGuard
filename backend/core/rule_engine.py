@@ -48,6 +48,63 @@ _PATTERNS = [
     ("prompt_leak", re.compile(r"\brepeat (the words|everything) above\b"), 0.7),
     ("delimiter_escape", re.compile(r"(-{3,}|={3,}|#{3,})\s*(end|start)\s*(of)?\s*(system|instructions?)"), 0.75),
     ("nested_instruction", re.compile(r"\bnew instructions?:\s"), 0.8),
+
+    # ------------------------------------------------------------------
+    # Indirect injection patterns (Layer F — tool_output / RAG content)
+    #
+    # These match language that would be natural ONLY if the document
+    # author was addressing an AI model (not a human reader), which is
+    # the defining characteristic of indirect / second-order injection.
+    # They are weighted 0.70–0.85 — below content-harm and hard-override
+    # patterns, but above soft triggers. The severity agreement gate
+    # (Layer E) still requires corroboration from Layer B+C before
+    # producing a HIGH/block decision.
+    # ------------------------------------------------------------------
+
+    # Instruction directly addressed to "the AI / assistant / model / LLM"
+    # from within a retrieved document. A human author of a webpage or
+    # email would not normally address the AI consuming that content.
+    ("indirect_ai_addressed", re.compile(
+        r"\b(hey|note to|attention|message to|dear|hi)\s+(the\s+)?"
+        r"(ai|assistant|model|llm|language model)\b"
+    ), 0.80),
+
+    # Framing retrieved/fetched text as a "system instruction" to transfer
+    # authority from the document source to the AI model.
+    ("indirect_role_transfer", re.compile(
+        r"\bthe\s+(following|above|below|retrieved|document|text)\s+"
+        r"(is\s+)?a?\s*(system\s+)?instruction\b"
+    ), 0.75),
+
+    # Delimiter-injection pattern: square-bracket or angle-bracket tags
+    # that look like system/developer directives followed by a colon,
+    # which is how attacker-controlled documents fake authority.
+    # This fires on "[System]: ..." or "<Instructions>: ..." but NOT on
+    # standalone "[System]" headings without a colon (those are common
+    # in legitimate IT docs — see indirect_benign.csv rows 1–6).
+    ("indirect_delimiter_inject", re.compile(
+        r"[\[<]\s*(system|developer|admin|instructions?|override)\s*[\]>]\s*:"
+    ), 0.80),
+
+    # Phrasing where a tool/API/search result explicitly claims to
+    # carry an override instruction. This is unambiguous: legitimate
+    # tool output does not tell the AI to "ignore" its prior context.
+    ("indirect_tool_override", re.compile(
+        r"\b(tool|function|api|search|result)\s+(said|says|output|result|response)"
+        r"\s*:\s*ignore\b"
+    ), 0.85),
+
+    # Marker injected by utils/preprocess.detect_base64_instructions()
+    # when a Base64 block decodes to injection-shaped content. If this
+    # marker appears, preprocess has already confirmed the payload.
+    ("indirect_split_chunk", re.compile(r"\[DECODED_B64:"), 0.85),
+
+    # Terse/field-style AI-directed instruction (e.g. in emails, runbooks,
+    # or metadata fields) where conversational greetings are omitted:
+    # "AI: new instructions", "Instruction for model: ignore...", "AI assistant: bypass"
+    ("indirect_terse_directive", re.compile(
+        r"\b(ai(\s+assistant)?|model|instructions?\s+for\s+(the\s+)?(ai|assistant|model))\s*:\s*(ignore|disregard|new\s+instructions?|bypass|reveal|output|authorize|act\s+as)\b"
+    ), 0.80),
 ]
 
 # Trigger words alone are NOT sufficient — they exist so Layer E can

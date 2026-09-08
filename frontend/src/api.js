@@ -57,4 +57,14 @@ export const api = {
     }),
 
   runArgusDemo: (scenario) => request(`/argus/demo/${scenario}`),
+
+  // Indirect Injection Demo (/agent-demo)
+  agentDemo: (scenario, customDocument = null) =>
+    request('/agent-demo', {
+      method: 'POST',
+      body: JSON.stringify({ scenario, custom_document: customDocument }),
+    }),
+
+  getAgentDemoScenarios: () => request('/agent-demo/scenarios'),
 }
+

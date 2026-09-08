@@ -68,7 +68,7 @@ python -m models.train
 ```
 This writes `models/detector.pkl` and `models/threshold.json`. You can
 skip this step entirely and the API still boots (fallback heuristic),
-but you won't have a trained classifier. (Full detail: see §6/§6a and
+but you won't have a trained classifier. (Full detail: see §7/§7a and
 "Running locally — step by step", step 4.)
 
 ### Step 4 — Start the backend
@@ -117,7 +117,7 @@ python -m scripts.benchmark_latency --fast
 python -m scripts.evaluation_report --fast
 python -m scripts.generate_eval_figures       # already fast by default
 ```
-(Full detail: see §6 and §6a — note the flag-default asymmetry called
+(Full detail: see §7 and §7a — note the flag-default asymmetry called
 out there for `generate_eval_figures.py`.)
 
 ### Step 8 — (Optional) Pull real attack data instead of the placeholder CSVs
@@ -255,12 +255,12 @@ hand-written toy examples.
 
 > **Only cite numbers generated WITHOUT `--fast`/`--sample-size`.** Every
 > script below supports a fast mode for quick local iteration (see
-> §6a), and every fast-mode output is clearly labeled as such. Numbers
+> §7a), and every fast-mode output is clearly labeled as such. Numbers
 > from a capped run are systematically easier (smaller, less varied
 > index) — don't let a `--fast` run's numbers end up in the paper by
 > accident. **`scripts/generate_eval_figures.py` now runs in fast mode by
-> default** (see §6a) — pass `--full` explicitly to get figures worth
-> citing. Re-run the three commands in §6 without any flags (and
+> default** (see §7a) — pass `--full` explicitly to get figures worth
+> citing. Re-run the three commands in §7 without any flags (and
 > `generate_eval_figures.py` *with* `--full`) before copying numbers out
 > of `evaluation_report.md`.
 
@@ -334,10 +334,84 @@ seconds, so adding ~14ms of gateway overhead is a <3% latency tax for a
 security check that runs on every message.
 
 **This 14ms number is a per-request figure, unrelated to how long the
-one-time index build takes** (see §6a) — once the semantic index is
+one-time index build takes** (see §7a) — once the semantic index is
 built, per-message latency is fast regardless of how big the corpus was.
 
-## 5. How Aegis compares to other approaches
+## 5. Indirect Injection Detection
+
+### 5.1 What Indirect Prompt Injection Is (and Why It's Harder)
+
+Direct prompt injection occurs when the user typing into the chat box tries to manipulate the model ("Ignore previous instructions and do X"). In contrast, **indirect prompt injection** (also called second-order injection) occurs when the attack payload is placed inside **third-party content** that an AI agent is asked to retrieve and process — such as:
+- A web search result or scraped webpage containing hidden instructions
+- A corporate knowledge base or RAG retrieval chunk poisoned with an override
+- An email or customer support ticket being summarized that commands unauthorized wire transfers or data leaks
+- Structured data payloads (calendar invites, product reviews, webhook metadata, PDF metadata) containing injection framing
+- Base64-encoded or obfuscated payloads embedded within technical documentation
+
+The user interacting with the AI agent may be completely innocent, but the agent's autonomous actions (approving transactions, sending emails, deleting records) are hijacked by the attacker who controlled the external data source.
+
+### 5.2 The Architecture Gap: SBERT Embedding Dilution & Sliding Windowing
+
+Traditional direct injection detectors score the entire input text as a single vector. When an attacker embeds a 10-word injection payload inside a 200–400 word document, scoring the whole document as a single vector **dilutes the attack signal**: the surrounding legitimate context dominates the SBERT embedding, causing semantic similarity (Layer B) and the ML classifier (Layer C) to underscore the text even when rules (Layer A) fire.
+
+To solve this, Aegis introduces **Sentence- and Token-Level Window Scoring**:
+1. When `source="tool_output"`, the text is preprocessed (normalizing Unicode, stripping zero-width characters, and decoding Base64 instructions).
+2. The preprocessed document is split into overlapping windows: both individual sentence chunks and sliding word windows (35 words, 15-word overlap).
+3. Every window is evaluated independently through Semantic Similarity (Layer B) and the ML Classifier (Layer C).
+4. The **maximum risk window** (`max_risk_window`) is passed into Severity Evaluation (Layer E), ensuring that high-signal attack spans are not averaged away by surrounding benign context.
+
+### 5.3 Dedicated Indirect Injection Detection Rules
+
+Targeted rule patterns are introduced in Layer A specifically for third-party document inspection:
+- `indirect_ai_addressed` (weight 0.80): Flags conversational language addressing an AI model from within a third-party document (e.g., `"Note to AI assistant:"`, `"Attention, AI model:"`).
+- `indirect_role_transfer` (weight 0.75): Flags phrasing that claims third-party text is an authoritative instruction (e.g., `"the following text is a system instruction"`).
+- `indirect_delimiter_inject` (weight 0.80): Matches artificial directive headers followed by colons (e.g., `"[System]:"`, `"<Instructions>:"`).
+- `indirect_tool_override` (weight 0.85): Flags tool/search outputs claiming an override (e.g., `"tool output: ignore previous"`).
+- `indirect_split_chunk` (weight 0.85): Matches `[DECODED_B64: ...]` markers automatically injected by the Base64 preprocessing heuristic when an encoded block decodes to injection keywords.
+- `indirect_terse_directive` (weight 0.80): Matches terse/field-style AI directives without conversational greetings (e.g., `"AI: new instructions"`, `"Instruction for model: ignore"`, `"AI assistant: bypass"`).
+
+### 5.4 Evaluation Results and Reproducibility
+
+Evaluate indirect injection detection using the dedicated script:
+```powershell
+cd backend
+python -m scripts.evaluate_indirect
+```
+
+Against the curated corpora (`data/indirect_injection.csv`, N=60 attack rows across 5 scenarios; and `data/indirect_benign.csv`, N=46 adversarial benign rows including boundary-hardened examples):
+
+| Metric | WITH Window Scoring | WITHOUT Window Scoring | Delta |
+|---|---|---|---|
+| **Precision** | **0.977** | 1.000 | -0.023 |
+| **Recall** | **70.0%** (42/60) | **3.3%** (2/60) | **+66.7 pp** |
+| **F1 Score** | **0.816** | 0.065 | +0.751 |
+| **False-Positive Rate** | **2.2%** (1/46) | **0.0%** (0/46) | +2.2% |
+
+#### Recall by Document Length Bucket (WITH Windowing)
+- **Short** (≤80 words): **24/37 (64.9%, 95% CI: 48.8%–78.2%)**
+- **Medium** (81–200 words): **8/13 (61.5%, 95% CI: 35.5%–82.3%)**
+- **Long** (>200 words): **10/10 (100.0%, 95% CI: 72.2%–100.0%)** — *100% (10/10, 95% CI: 72.2%–100.0%) on the long-document bucket is directionally strong and validates the windowing fix on the exact condition it was built for, but N=10 is a small sample; treat as promising, not conclusive.*
+
+#### Key Findings
+1. **Windowing is essential for long documents:** On documents over 200 words (200–350 words: clinical protocols, distributed architecture RFCs, lease contracts, regulatory audits), whole-document vector averaging caused severe SBERT dilution, producing near-zero detection. Window scoring successfully surfaced every single payload, achieving **100% recall (10/10, 95% CI: 72.2%–100.0%)** on the long document bucket. Indirect recall stands at **70.0%** vs. 98.4% direct (28.4 pp gap remaining) — windowing was the single biggest lever, raising recall from 3.3% to 70.0% (42/60, 95% CI: 57.5%–80.1%, +66.7 pp), starting from near-zero.
+2. **Hardened Adversarial Benign Subsets (FPR):**
+   - Legitimate Base64 data (JWTs, data URIs, session IDs, technical config blobs): **0/11 flagged (0.0% FPR, 95% CI: 0.0%–25.9%)**
+   - Hardened delimiter headers (including exact colon-terminated tags `[System]:`, `[Admin]:`, `<Instructions>:`): **1/18 flagged (5.6% FPR, 95% CI: 1.0%–25.8%)** — only 1 borderline technical status log triggered sanitization; 17 passed cleanly due to agreement gate suppression.
+   - Long clean documents with technical vocabulary (`override`, `bypass`, `system`, `instructions`): **0/17 flagged (0.0% FPR, 95% CI: 0.0%–18.4%)**
+   - Overall FPR across all 46 adversarial benign rows: **2.2% (1/46, 95% CI: 0.4%–11.3%)**.
+3. **Threshold Calibration:** The delta produces a low but non-zero FPR on boundary-adversarial input (1/46 = 2.2%, 95% CI: 0.4%–11.3%) — this is a more credible number than the earlier 0.0% and shows no sign of gross miscalibration, but should not be read as proof of correct tuning.
+
+#### Honest Limitations & Scenario Recall Breakdown
+- **Per-Scenario Recall:**
+  - `poisoned_rag`: 11/13 (84.6%, 95% CI: 57.8%–95.7%)
+  - `obfuscated`: 9/11 (81.8%, 95% CI: 52.3%–94.9%)
+  - `poisoned_webpage`: 9/12 (75.0%, 95% CI: 46.8%–91.1%)
+  - `malicious_email`: 7/12 (58.3%, 95% CI: 32.0%–80.7%)
+  - `structured_data`: 6/12 (50.0%, 95% CI: 25.4%–74.6%)
+- **Sample-size caveat (N≈11–13 per scenario, N=60 total):** Each scenario type contains 11–13 examples. Recall estimates at this sample size have wide confidence intervals (reported via 95% Wilson score intervals, spanning up to 49 pp). These numbers show which scenario types the pipeline handles well or poorly, not a stable quantitative estimate. Do not compare these numbers to the N=393k direct-injection metrics.
+- **Out of scope:** Multi-modal indirect injection (images, audio), multi-hop distributed agent chaining, and arbitrary non-UTF-8 steganographic payloads are explicitly out of scope.
+
+## 6. How Aegis compares to other approaches
 
 | Approach | How it decides | Over-defense (false positives) | Explainability | Multi-turn / indirect injection |
 |---|---|---|---|---|
@@ -353,7 +427,7 @@ its contribution is being **transparent and measurable**: every one of
 its numbers above comes from an open, reproducible pipeline you can point
 a reviewer at and re-run, rather than a black-box vendor claim.
 
-## 6. How to reproduce these numbers yourself
+## 7. How to reproduce these numbers yourself
 
 ```powershell
 cd backend
@@ -399,7 +473,7 @@ loaded/encoded, elapsed time, ETA) instead of going silent — if a command
 looks "stuck," it almost certainly isn't; give it a few seconds to print
 its first progress line and watch the ETA.
 
-### 6a. Fast / smoke-test mode
+### 7a. Fast / smoke-test mode
 
 `models/train.py`, `scripts/benchmark_latency.py`, and
 `scripts/evaluation_report.py` all default to the **full** corpus and
@@ -449,7 +523,7 @@ only need it for numbers you intend to cite as final results.
 
 ---
 
-## 7. Full technical reference
+## 8. Full technical reference
 
 ## Architecture
 
@@ -466,10 +540,11 @@ independently:
 |---|---|---|
 | Preprocessing | `backend/utils/preprocess.py` | Normalizes unicode, strips zero-width characters, collapses whitespace tricks attackers use to dodge keyword matching |
 | Rule Detection (Layer A) | `backend/core/rule_engine.py` | Fast regex/keyword pass — deliberately over-inclusive, never allowed to block alone |
-| Semantic Similarity (Layer B) | `backend/core/semantic_engine.py` | SBERT embedding compared against both an attack corpus and a benign-trigger-word corpus (dual-corpus anchoring). Builds a singleton index on first use — see §6a for controlling its size and §"Troubleshooting" for reading its progress output |
+| Semantic Similarity (Layer B) | `backend/core/semantic_engine.py` | SBERT embedding compared against both an attack corpus and a benign-trigger-word corpus (dual-corpus anchoring). Builds a singleton index on first use — see §7a for controlling its size and §"Troubleshooting" for reading its progress output |
 | ML Classifier (Layer C) | `backend/core/classifier.py`, `backend/models/train.py` | Lightweight logistic regression over handcrafted features |
 | Conversation Drift (Layer D) | `backend/core/drift.py` | Tracks session-level intent drift across the last 5 turns |
 | Severity Score + agreement gate (Layer E) | `backend/core/severity.py` | Combines all signals; a lone rule match can never reach HIGH/block alone |
+| Indirect Injection Inspection (Layer F) | `backend/utils/windowing.py`, `backend/api/agent_demo.py` | Sentence- and token-level windowing for tool/retrieved outputs with max-risk scoring to defeat SBERT dilution |
 | Explanation | `backend/core/explain.py` | Turns the raw scores into a human-readable reason string |
 | Sanitize / Pass / Block | `backend/core/sanitize.py` | Span-removal or delimiter-quarantine ("spotlighting") for MEDIUM-tier prompts |
 | Downstream LLM | `backend/core/llm_client.py`, `backend/api/chat.py` | Sends SAFE/LOW prompts and sanitized MEDIUM prompts to Groq; blocks HIGH prompts before provider call |
@@ -592,7 +667,7 @@ python -m models.train
 ```
 
 or, for a quick check that this step works at all before committing to
-the full multi-hour run (see §6a):
+the full multi-hour run (see §7a):
 
 ```powershell
 python -m models.train --fast
@@ -625,7 +700,7 @@ Leave this terminal window running. Open `http://localhost:8000/docs` in
 a browser — you should see the FastAPI Swagger UI listing `/detect`,
 `/chat`, `/simulate`, `/logs`, `/statistics`, `/stress-test`, `/health`. The very
 first request will be slow while SBERT loads into memory **and** builds
-the full production semantic index from `attacks.csv` (see §6 for
+the full production semantic index from `attacks.csv` (see §7 for
 realistic timing — this can take a while on CPU); after that first
 request completes, subsequent ones are fast (~14ms). Watch the
 `[SemanticEngine]` progress lines in this terminal while you wait.
@@ -763,7 +838,7 @@ commonly referenced for this kind of project:
 > catch, but they are not the same attack style. The HackAPrompt rows
 > alone make up ~393k of the ~393k+ total (harmful-content rows are only
 > ~10 per category) — this size imbalance is *why* the training/eval/figure
-> scripts stratify by `cluster_name` when downsampling (see §6a), so a
+> scripts stratify by `cluster_name` when downsampling (see §7a), so a
 > plain random sample wouldn't accidentally wipe out the harmful-content
 > categories entirely.
 >
@@ -798,7 +873,7 @@ python -m scripts.build_datasets --source hackaprompt --limit 500
 # 3. Once you've reviewed both output files, fold them into attacks.csv
 python -m scripts.build_datasets --source all --limit 500 --merge
 
-# 4. Retrain on the real data (see §6a for --fast if you just want a quick check first)
+# 4. Retrain on the real data (see §7a for --fast if you just want a quick check first)
 python -m models.train
 ```
 
@@ -822,7 +897,7 @@ python -m scripts.benchmark_latency
 ```
 
 `generate_eval_figures.py` defaults to a fast, 2000-row sample if you
-omit `--full` — see §6a. `benchmark_latency.py` and
+omit `--full` — see §7a. `benchmark_latency.py` and
 `evaluation_report.py` default to the full corpus and accept
 `--fast`/`--sample-size` to opt into a quick check instead.
 
@@ -881,8 +956,8 @@ edit the fallback URL in `frontend/src/api.js`.
 **`python -m models.train` / `benchmark_latency` / `evaluation_report`
 looks stuck with no output for a long time**
 It almost certainly isn't stuck — it's SBERT-embedding the ~393k-row
-attack corpus, which takes real time on CPU (see §6 for the ~2–3 hour
-estimate and §6a for `--fast`). Every stage now prints progress
+attack corpus, which takes real time on CPU (see §7 for the ~2–3 hour
+estimate and §7a for `--fast`). Every stage now prints progress
 (`[SemanticEngine] ...` lines, `encoded N/total (rate/s, eta)`); if you
 see no output at all within the first ~10 seconds of a fresh run, that's
 unusual — check you're on the version of `embedding.py`/`semantic_engine.py`/
@@ -926,3 +1001,6 @@ again.
 - Multi-LLM-provider support, production auth, rate limiting, billing
 - A full red-teaming / attack-generation suite
 - Training a large custom foundation model from scratch
+- Multi-modal indirect prompt injection (attacks embedded in images, video frames, or audio streams)
+- Multi-hop distributed agent chaining across unmonitored external microservices
+- Decoding arbitrary binary or non-UTF-8 steganographic payloads (only UTF-8 Base64 blocks containing injection keywords are inspected)

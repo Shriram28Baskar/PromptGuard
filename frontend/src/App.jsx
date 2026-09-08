@@ -4,6 +4,7 @@ import Playground from './pages/Playground'
 import Dashboard from './pages/Dashboard'
 import Logs from './pages/Logs'
 import ArgusDecisions from './pages/ArgusDecisions'
+import IndirectInjectionDemo from './pages/IndirectInjectionDemo'
 
 const NAV_ITEMS = [
   { to: '/', label: 'Aegis Chat', icon: 'A' },
@@ -11,6 +12,7 @@ const NAV_ITEMS = [
   { to: '/dashboard', label: 'Evaluation', icon: '#' },
   { to: '/logs', label: 'Audit Logs', icon: '=' },
   { to: '/argus', label: 'ARGUS Decisions', icon: '⚡' },
+  { to: '/indirect-demo', label: 'Indirect Injection', icon: '🛡️' },
 ]
 
 export default function App() {
@@ -55,6 +57,7 @@ export default function App() {
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/logs" element={<Logs />} />
           <Route path="/argus" element={<ArgusDecisions />} />
+          <Route path="/indirect-demo" element={<IndirectInjectionDemo />} />
         </Routes>
       </main>
     </div>

@@ -41,12 +41,16 @@ def get_tier(
 ) -> str:
     high_embed_th = config.HIGH_EMBED_THRESHOLD
     high_clf_th = config.HIGH_CLASSIFIER_THRESHOLD
+    med_embed_th = config.MEDIUM_EMBED_THRESHOLD
+    med_clf_th = config.MEDIUM_CLASSIFIER_THRESHOLD
     if is_tool_output:
         # Layer F: stricter thresholds for indirect injection via tool
         # output / RAG retrieval, since it has no legitimate reason to
         # contain instruction-like language directed at the model.
         high_embed_th += config.TOOL_OUTPUT_EMBED_DELTA
         high_clf_th += config.TOOL_OUTPUT_CLASSIFIER_DELTA
+        med_embed_th += config.TOOL_OUTPUT_EMBED_DELTA
+        med_clf_th += config.TOOL_OUTPUT_CLASSIFIER_DELTA
 
     rule_match = rule_score >= 0.5
     matched_rules = matched_rules or []
@@ -59,8 +63,8 @@ def get_tier(
     elif score >= config.MEDIUM_SCORE_THRESHOLD:
         return "MEDIUM"
     elif rule_match and (
-        embed_score > config.MEDIUM_EMBED_THRESHOLD
-        or classifier_prob > config.MEDIUM_CLASSIFIER_THRESHOLD
+        embed_score > med_embed_th
+        or classifier_prob > med_clf_th
     ):
         return "MEDIUM"
     elif score >= config.LOW_SCORE_THRESHOLD or rule_match:

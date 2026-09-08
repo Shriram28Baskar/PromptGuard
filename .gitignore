@@ -59,7 +59,8 @@ Thumbs.db
 
 # Reports
 backend/reports.zip
-backend/reports/
+backend/reports/*
+!backend/reports/indirect_evaluation_report.md
 
 # Datasets — whitelist benchmark data for prompt detection
 backend/data/*.json

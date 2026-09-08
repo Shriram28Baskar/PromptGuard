@@ -7,7 +7,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 import config
-from api import argus, chat, dashboard, detect, logs
+from api import argus, chat, dashboard, detect, logs, agent_demo
 from database.db import init_db
 
 app = FastAPI(
@@ -36,6 +36,7 @@ app.include_router(chat.router, tags=["aegis-chat"])
 app.include_router(dashboard.router, tags=["dashboard"])
 app.include_router(logs.router, tags=["logs"])
 app.include_router(argus.router)  # PS15 — /argus/propose, /argus/demo/{scenario}
+app.include_router(agent_demo.router)  # Indirect injection demo — /agent-demo
 
 
 @app.get("/health")
