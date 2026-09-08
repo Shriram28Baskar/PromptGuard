@@ -1,0 +1,80 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Environment variables — STRICTLY EXCLUDED
+.env
+.env.*
+*.env
+**/.env
+**/.env.*
+!.env.example
+!**/.env.example
+
+# Databases
+*.db
+*.sqlite3
+
+# Build
+build/
+dist/
+*.egg-info/
+
+# Node
+node_modules/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs & test caches
+*.log
+.pytest_cache/
+**/.pytest_cache/
+
+# Model checkpoints
+*.pt
+*.pth
+*.ckpt
+*.onnx
+*.bin
+*.safetensors
+*.pkl
+*.joblib
+!backend/models/detector.pkl
+
+# FAISS indexes
+*.faiss
+*.index
+
+# Reports
+backend/reports.zip
+backend/reports/
+
+# Datasets — whitelist benchmark data for prompt detection
+backend/data/*.json
+backend/data/*.parquet
+backend/data/*.zip
+!backend/data/attacks.csv
+!backend/data/benign.csv
+!backend/data/trigger_benign.csv
+!backend/data/alpaca_benign.csv
+!backend/data/harmful_behaviors.csv
+
+# Keep directory structure
+!backend/data/.gitkeep
+
+# Evaluation outputs
+backend/results/
+backend/outputs/
+backend/cache/

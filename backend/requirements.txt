@@ -1,0 +1,17 @@
+fastapi==0.115.0
+uvicorn[standard]==0.30.6
+pydantic==2.9.2
+sentence-transformers==3.1.1
+faiss-cpu==1.8.0
+scikit-learn==1.5.2
+numpy==1.26.4
+pandas==2.2.2
+python-multipart==0.0.9
+
+# Optional — only needed for scripts/build_datasets.py
+datasets==3.0.1
+huggingface_hub==0.25.1
+
+# Optional — only needed for scripts/generate_eval_figures.py
+matplotlib==3.9.2
+
