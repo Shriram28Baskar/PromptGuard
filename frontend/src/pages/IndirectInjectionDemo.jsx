@@ -105,20 +105,20 @@ function TierBadge({ tier, action }) {
 
 function OutcomeBox({ title, outcome, isAttacker }) {
   const color = STATUS_COLORS[outcome.status] ?? 'var(--text-dim)'
-  const bg = isAttacker ? '#f9731620' : '#22c55e20'
+  const bg = isAttacker ? 'rgba(249, 115, 22, 0.09)' : 'rgba(34, 197, 94, 0.09)'
   return (
     <div style={{ ...styles.outcomeBox, background: bg, borderColor: color }}>
-      <div style={{ fontWeight: 700, marginBottom: 6, color }}>{title}</div>
-      <div style={{ fontWeight: 600, fontSize: '1.1rem', color }}>{outcome.status}</div>
+      <div style={{ fontWeight: 700, marginBottom: 4, color, fontSize: '0.8rem' }}>{title}</div>
+      <div style={{ fontWeight: 700, fontSize: '1.05rem', color, wordBreak: 'break-word' }}>{outcome.status}</div>
       {outcome.action_triggered && (
         <div style={styles.outcomeAction}>
-          Action: <code>{outcome.action_triggered}()</code>
+          Action: <code style={{ fontFamily: 'var(--font-mono)' }}>{outcome.action_triggered}()</code>
         </div>
       )}
       {outcome.stub_result && (
         <pre style={styles.stubJson}>{JSON.stringify(outcome.stub_result, null, 2)}</pre>
       )}
-      <div style={{ fontSize: '0.78rem', color: 'var(--text-dim)', marginTop: 6 }}>
+      <div style={styles.outcomeReason}>
         {outcome.reason}
       </div>
     </div>
@@ -195,10 +195,12 @@ function ResultCard({ data }) {
           <div style={styles.explanation}>{d.explanation}</div>
           {d.matched_rules.length > 0 && (
             <div style={styles.rulesSection}>
-              <span style={styles.rulesLabel}>Matched rules: </span>
-              {d.matched_rules.map((r) => (
-                <code key={r} style={styles.ruleTag}>{r}</code>
-              ))}
+              <span style={styles.rulesLabel}>Matched rules:</span>
+              <div style={styles.rulesContainer}>
+                {d.matched_rules.map((r) => (
+                  <code key={r} style={styles.ruleTag}>{r}</code>
+                ))}
+              </div>
             </div>
           )}
           <WindowingBadge
@@ -209,14 +211,14 @@ function ResultCard({ data }) {
         </div>
 
         {/* Pane 3 — Before / After */}
-        <div style={styles.pane}>
+        <div style={{ ...styles.pane, borderRight: 'none' }}>
           <div style={styles.paneTitle}>③ Before / After</div>
           <OutcomeBox
             title="Without Aegis (WOULD)"
             outcome={data.outcome_without_aegis}
             isAttacker={true}
           />
-          <div style={{ margin: '8px 0', textAlign: 'center', fontSize: '1.2rem' }}>↓</div>
+          <div style={{ margin: '6px 0', textAlign: 'center', color: 'var(--text-dim)', fontSize: '1.1rem', lineHeight: 1 }}>↓</div>
           <OutcomeBox
             title="With Aegis (ACTUAL)"
             outcome={data.outcome_with_aegis}
@@ -315,7 +317,7 @@ export default function IndirectInjectionDemo() {
 // Styles
 // ---------------------------------------------------------------------------
 const styles = {
-  page: { maxWidth: 1100, margin: '0 auto', padding: '0 16px 48px' },
+  page: { maxWidth: 1180, margin: '0 auto', padding: '0 16px 48px' },
   banner: {
     background: 'var(--bg-card)',
     border: '1px solid var(--border)',
@@ -385,37 +387,47 @@ const styles = {
   scenarioLabel: { fontWeight: 700, fontSize: '0.95rem' },
   threePaneGrid: {
     display: 'grid',
-    gridTemplateColumns: '1fr 1fr 1fr',
+    gridTemplateColumns: 'minmax(240px, 0.85fr) minmax(0, 1.15fr) minmax(0, 1.35fr)',
     gap: 0,
+    alignItems: 'stretch',
   },
   pane: {
-    padding: '16px 18px',
+    padding: '18px 20px',
     borderRight: '1px solid var(--border)',
+    minWidth: 0,
+    boxSizing: 'border-box',
+    display: 'flex',
+    flexDirection: 'column',
   },
   paneTitle: {
     fontWeight: 700,
-    fontSize: '0.82rem',
+    fontSize: '0.8rem',
     textTransform: 'uppercase',
-    letterSpacing: '0.05em',
+    letterSpacing: '0.06em',
     color: 'var(--text-dim)',
-    marginBottom: 10,
+    marginBottom: 12,
+    whiteSpace: 'nowrap',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
   },
   toggleBtn: {
     fontSize: '0.78rem',
-    padding: '3px 10px',
+    padding: '4px 10px',
     borderRadius: 4,
     border: '1px solid var(--border)',
     background: 'transparent',
     color: 'var(--text-dim)',
     cursor: 'pointer',
     marginBottom: 8,
+    alignSelf: 'flex-start',
   },
   documentText: {
     fontSize: '0.8rem',
     color: 'var(--text-dim)',
     lineHeight: 1.6,
     whiteSpace: 'pre-wrap',
-    maxHeight: 300,
+    wordBreak: 'break-word',
+    maxHeight: 320,
     overflowY: 'auto',
   },
   documentSnippet: {
@@ -423,49 +435,85 @@ const styles = {
     color: 'var(--text-dim)',
     fontStyle: 'italic',
     lineHeight: 1.5,
+    wordBreak: 'break-word',
   },
   explanation: {
     fontSize: '0.82rem',
     lineHeight: 1.5,
     marginBottom: 10,
+    wordBreak: 'break-word',
   },
-  rulesSection: { fontSize: '0.78rem', marginTop: 8, marginBottom: 8 },
-  rulesLabel: { color: 'var(--text-dim)', marginRight: 4 },
+  rulesSection: {
+    fontSize: '0.78rem',
+    marginTop: 10,
+    marginBottom: 10,
+  },
+  rulesLabel: {
+    color: 'var(--text-dim)',
+    marginRight: 6,
+    display: 'inline-block',
+    marginBottom: 4,
+  },
+  rulesContainer: {
+    display: 'flex',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginTop: 4,
+  },
   ruleTag: {
-    background: 'var(--bg-code)',
-    padding: '1px 5px',
-    borderRadius: 3,
-    marginRight: 4,
+    background: 'var(--surface-raised, #1a222d)',
+    border: '1px solid var(--border)',
+    padding: '2px 7px',
+    borderRadius: 4,
     fontSize: '0.74rem',
+    fontFamily: 'var(--font-mono)',
   },
   windowBadge: {
-    marginTop: 10,
-    padding: '6px 10px',
-    background: 'var(--bg-code)',
+    marginTop: 'auto',
+    padding: '8px 12px',
+    background: 'var(--surface-raised, #1a222d)',
+    border: '1px solid var(--border)',
     borderRadius: 6,
     fontSize: '0.76rem',
     lineHeight: 1.5,
+    wordBreak: 'break-word',
   },
   windowLabel: { fontWeight: 600, marginRight: 6 },
   outcomeBox: {
-    padding: '10px 12px',
-    borderRadius: 7,
+    padding: '12px 14px',
+    borderRadius: 8,
     border: '1px solid',
-    marginBottom: 4,
+    boxSizing: 'border-box',
+    width: '100%',
+    minWidth: 0,
   },
   outcomeAction: {
-    marginTop: 4,
+    marginTop: 6,
     fontSize: '0.82rem',
     color: 'var(--text-dim)',
+    wordBreak: 'break-word',
+  },
+  outcomeReason: {
+    fontSize: '0.78rem',
+    color: 'var(--text-dim)',
+    marginTop: 8,
+    lineHeight: 1.5,
+    wordBreak: 'break-word',
   },
   stubJson: {
     marginTop: 6,
     fontSize: '0.74rem',
-    background: 'var(--bg-code)',
-    padding: '6px 8px',
-    borderRadius: 4,
+    background: 'var(--surface, #121821)',
+    border: '1px solid var(--border)',
+    color: 'var(--text-primary)',
+    padding: '8px 10px',
+    borderRadius: 6,
     overflowX: 'auto',
-    maxHeight: 120,
+    maxHeight: 130,
     overflowY: 'auto',
+    whiteSpace: 'pre-wrap',
+    wordBreak: 'break-word',
+    boxSizing: 'border-box',
+    width: '100%',
   },
 }
